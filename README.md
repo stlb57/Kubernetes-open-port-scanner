@@ -1,36 +1,86 @@
-# 🔍 K8s-Scan: Concurrent Port Recon Module
+# 🚀 Kubernetes Port Scanner (k8s-scan)
 
-A high-performance CLI tool built in **Go** to scan Kubernetes Pods for open ports. This project demonstrates mastery of Go concurrency patterns and the `client-go` library, designed for security auditing and network discovery in cloud-native environments.
-
----
-
-### ⚡ Key Features
-
-* [cite_start]**God-Level Concurrency**: Uses a **Worker Pool** pattern (Goroutines & Channels) to scan hundreds of ports simultaneously without resource exhaustion. [cite: 103, 104, 106]
-* [cite_start]**K8s Service Discovery**: Authenticates with clusters via `client-go` to dynamically fetch Pod IPs across any namespace. [cite: 756, 1258]
-* [cite_start]**Professional CLI**: Built with the **Cobra** framework, providing a standardized UX similar to `kubectl`. [cite: 1849, 1857]
-* [cite_start]**Safe Execution**: Implements `sync.WaitGroup` for proper lifecycle management and `net.DialTimeout` for network resiliency. [cite: 170, 449]
+A high-performance CLI tool written in **Go** designed to audit and discover open ports across Kubernetes Pods. By leveraging Go's powerful concurrency primitives and the official `client-go` library, `k8s-scan` identifies network vulnerabilities and exposed services within your cluster at scale.
 
 ---
 
-### 🏗️ Architecture
+## ✨ Key Features
 
-The tool follows a professional **Producer-Consumer** architecture:
-1.  [cite_start]**Producer**: Fetches Pod IPs from the Kubernetes API. [cite: 107]
-2.  [cite_start]**Job Queue**: A buffered channel distributes tasks to workers. [cite: 107]
-3.  [cite_start]**Worker Pool**: A fixed number of workers (50+) consume jobs and execute port checks. [cite: 109, 113]
-4.  [cite_start]**Results Aggregator**: Results are collected via a separate channel and printed to the UI. [cite: 108]
+* **⚡ High-Performance Concurrency**: Utilizes a robust **Worker Pool** pattern with 50 concurrent goroutines to scan hundreds of targets simultaneously without overwhelming system resources.
+* **☸️ Native K8s Integration**: Directly communicates with the Kubernetes API to dynamically discover Pod IPs in real-time.
+* **🛠️ Professional CLI Interface**: Built on the **Cobra** framework, providing a familiar, `kubectl`-like experience with flags and subcommands.
+* **🛡️ Resilient Scanning**: Implements `net.DialTimeout` to ensure the scanner doesn't hang on unresponsive network segments.
 
 ---
 
-### 🚀 Getting Started
+## 🏗️ How It Works
 
-#### Prerequisites
-* Go 1.20+
-* [cite_start]A running Kubernetes cluster (Minikube/Kind) [cite: 1261]
-* [cite_start]Configured `~/.kube/config` [cite: 804, 824]
+The tool implements a **Producer-Consumer** architecture:
 
-#### Installation
+1. **Discovery (Producer)**: The tool fetches all Pods from a specified namespace using your local `~/.kube/config`.
+2. **Job Distribution**: Pod IPs and target ports (80, 443, 8080) are pushed into a buffered "jobs" channel.
+3. **Worker Pool (Consumer)**: 50 workers pull tasks from the channel and attempt to establish TCP connections.
+4. **Result Aggregation**: Successes are collected via a results channel and printed to the console in real-time.
+
+---
+
+## 🚦 Prerequisites
+
+Before running the tool, ensure you have:
+
+* **Go**: Version 1.25.5 or higher.
+* **Kubeconfig**: A valid configuration file located at `~/.kube/config`.
+* **Permissions**: RBAC permissions to `list` pods in the target namespace.
+
+---
+
+## 📥 Installation
+
+Clone the repository and build the binary:
+
 ```bash
-go mod tidy
+# Build the project
 go build -o k8s-scan main.go
+
+# (Optional) Move to your path
+mv k8s-scan /usr/local/bin/
+
+```
+
+---
+
+## 🚀 Usage
+
+The scanner defaults to the `default` namespace but can be targeted at any specific namespace using flags.
+
+### Scan Default Namespace
+
+```bash
+./k8s-scan scan
+
+```
+
+### Scan a Specific Namespace
+
+```bash
+./k8s-scan scan --namespace my-app-production
+# OR
+./k8s-scan scan -n kube-system
+
+```
+
+---
+
+## 🛠️ Configuration & Dependencies
+
+This project relies on professional-grade Go modules:
+
+* `k8s.io/client-go`: For Kubernetes cluster communication.
+* `github.com/spf13/cobra`: For the CLI structure and flag management.
+* `k8s.io/apimachinery`: For Kubernetes API schema definitions.
+
+---
+
+## 📝 License
+
+Copyright © 2025. All rights reserved.
