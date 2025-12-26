@@ -1,0 +1,22 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+k8s-scan
+k8s-scan-linux
+k8s-scan-mac
+
+# Dependency directories
+vendor/
+
+# Configuration files
+.kube/config
+
+# IDE specific files
+.vscode/
+.idea/
+
+# Go specific
+go.sum
