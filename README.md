@@ -6,7 +6,7 @@ A high-performance CLI tool written in **Go** designed to audit and discover ope
 
 ## ✨ Key Features
 
-* **⚡ High-Performance Concurrency**: Utilizes a robust **Worker Pool** pattern with 50 concurrent goroutines to scan hundreds of targets simultaneously without overwhelming system resources.
+* **⚡ High-Performance Concurrency**: Utilizes a robust **Worker Pool** pattern with 100 concurrent goroutines to scan hundreds of targets simultaneously without overwhelming system resources.
 * **☸️ Native K8s Integration**: Directly communicates with the Kubernetes API to dynamically discover Pod IPs in real-time.
 * **🛠️ Professional CLI Interface**: Built on the **Cobra** framework, providing a familiar, `kubectl`-like experience with flags and subcommands.
 * **🛡️ Resilient Scanning**: Implements `net.DialTimeout` to ensure the scanner doesn't hang on unresponsive network segments.
