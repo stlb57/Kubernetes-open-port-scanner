@@ -15,47 +15,41 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-// Target struct for the worker pool
 type Target struct {
 	IP   string
 	Port int
 }
 
-// scanCmd represents the scan command
 var scanCmd = &cobra.Command{
 	Use:   "scan",
 	Short: "Scan K8s Pods for open ports",
 	Long:  `Discovers Pod IPs in the cluster and scans them using a concurrent worker pool.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		startScanner() // This calls your actual logic below
+		startScanner()
 	},
 }
 
 func init() {
-	rootCmd.AddCommand(scanCmd) // This connects 'scan' to your main 'k8s-scan' tool [cite: 1921]
+	rootCmd.AddCommand(scanCmd)
 }
 
 func startScanner() {
-	// 1. Setup K8s Client [cite: 1289, 1293]
 	userHomeDir, _ := os.UserHomeDir()
 	kubeconfigPath := filepath.Join(userHomeDir, ".kube", "config")
 	config, _ := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
 	clientset, _ := kubernetes.NewForConfig(config)
 
-	// 2. Fetch Pods using the Namespace variable from root.go [cite: 1314, 1318]
 	pods, _ := clientset.CoreV1().Pods(Namespace).List(context.Background(), metav1.ListOptions{})
 
-	// 3. Worker Pool Setup [cite: 106, 110, 552]
 	jobs := make(chan Target, 100)
 	results := make(chan string, 100)
 	var wg sync.WaitGroup
 
-	for w := 1; w <= 50; w++ { // Hire 50 workers [cite: 578]
+	for w := 1; w <= 50; w++ {
 		wg.Add(1)
 		go port_checker(&wg, jobs, results)
 	}
 
-	// 4. Feeding the Machine [cite: 583, 584, 588]
 	go func() {
 		commonPorts := []int{80, 443, 8080}
 		for _, pod := range pods.Items {
@@ -69,11 +63,10 @@ func startScanner() {
 	}()
 
 	go func() {
-		wg.Wait()      // Wait for workers [cite: 590, 605]
-		close(results) // Close results bin [cite: 592]
+		wg.Wait()
+		close(results)
 	}()
 
-	// 5. Output
 	fmt.Printf("🔍 Scanning namespace: %s...\n", Namespace)
 	for res := range results {
 		fmt.Println(res)
