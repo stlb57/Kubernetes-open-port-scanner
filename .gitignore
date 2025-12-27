@@ -20,3 +20,4 @@ vendor/
 
 # Go specific
 go.sum
+testing/
