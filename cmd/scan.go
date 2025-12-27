@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -22,10 +23,10 @@ type Target struct {
 }
 
 type ScanResult struct {
-	PodName   string
-	IP        string
-	Port      int
-	Timestamp string
+	PodName   string `json:"PodName"`
+	IP        string `json:"IP"`
+	Port      int    `json:"Port"`
+	Timestamp string `json:"Timestamp"`
 }
 
 var scanCmd = &cobra.Command{
@@ -75,10 +76,18 @@ func startScanner() {
 		close(results)
 	}()
 
+	var allResults []ScanResult
 	fmt.Printf("🔍 Scanning namespace: %s...\n", Namespace)
 	for res := range results {
-		fmt.Println(res)
+		allResults = append(allResults, res)
 	}
+	jsonData, err := json.MarshalIndent(allResults, "", "  ")
+	if err != nil {
+		fmt.Printf("Error marshaling results: %s\n", err.Error())
+		return
+	}
+	fmt.Println(string(jsonData))
+
 }
 
 func port_checker(wg *sync.WaitGroup, jobs <-chan Target, results chan<- ScanResult) {
