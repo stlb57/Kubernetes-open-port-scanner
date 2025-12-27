@@ -16,8 +16,16 @@ import (
 )
 
 type Target struct {
-	IP   string
-	Port int
+	PodName string
+	IP      string
+	Port    int
+}
+
+type ScanResult struct {
+	PodName   string
+	IP        string
+	Port      int
+	Timestamp string
 }
 
 var scanCmd = &cobra.Command{
@@ -42,7 +50,7 @@ func startScanner() {
 	pods, _ := clientset.CoreV1().Pods(Namespace).List(context.Background(), metav1.ListOptions{})
 
 	jobs := make(chan Target, 100)
-	results := make(chan string, 100)
+	results := make(chan ScanResult, 100)
 	var wg sync.WaitGroup
 
 	for w := 1; w <= 50; w++ {
@@ -55,7 +63,7 @@ func startScanner() {
 		for _, pod := range pods.Items {
 			if pod.Status.PodIP != "" {
 				for _, p := range commonPorts {
-					jobs <- Target{IP: pod.Status.PodIP, Port: p}
+					jobs <- Target{PodName: pod.Name, IP: pod.Status.PodIP, Port: p}
 				}
 			}
 		}
@@ -73,13 +81,20 @@ func startScanner() {
 	}
 }
 
-func port_checker(wg *sync.WaitGroup, jobs <-chan Target, results chan<- string) {
+func port_checker(wg *sync.WaitGroup, jobs <-chan Target, results chan<- ScanResult) {
 	defer wg.Done()
 	for target := range jobs {
 		address := fmt.Sprintf("%s:%d", target.IP, target.Port)
 		conn, err := net.DialTimeout("tcp", address, 1*time.Second)
 		if err == nil {
-			results <- fmt.Sprintf("✅ OPEN | %s:%d", target.IP, target.Port)
+			res := ScanResult{
+				PodName:   target.PodName,
+				IP:        target.IP,
+				Port:      target.Port,
+				Timestamp: time.Now().UTC().Format(time.RFC3339),
+			}
+
+			results <- res
 			conn.Close()
 		}
 	}
