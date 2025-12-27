@@ -6,8 +6,9 @@ A high-performance CLI tool written in **Go** designed to audit and discover ope
 
 ## ✨ Key Features
 
-* **⚡ High-Performance Concurrency**: Utilizes a robust **Worker Pool** pattern with 50 concurrent goroutines to scan hundreds of targets simultaneously without overwhelming system resources.
+* **⚡ High-Performance Concurrency**: Utilizes a robust **Worker Pool** pattern with 100 concurrent goroutines to scan hundreds of targets simultaneously without overwhelming system resources.
 * **☸️ Native K8s Integration**: Directly communicates with the Kubernetes API to dynamically discover Pod IPs in real-time.
+* **📊 Structured JSON Reporting**: Generates machine-readable, pretty-printed JSON audit reports for easy integration with security pipelines.
 * **🛠️ Professional CLI Interface**: Built on the **Cobra** framework, providing a familiar, `kubectl`-like experience with flags and subcommands.
 * **🛡️ Resilient Scanning**: Implements `net.DialTimeout` to ensure the scanner doesn't hang on unresponsive network segments.
 
@@ -20,7 +21,23 @@ The tool implements a **Producer-Consumer** architecture:
 1. **Discovery (Producer)**: The tool fetches all Pods from a specified namespace using your local `~/.kube/config`.
 2. **Job Distribution**: Pod IPs and target ports (80, 443, 8080) are pushed into a buffered "jobs" channel.
 3. **Worker Pool (Consumer)**: 50 workers pull tasks from the channel and attempt to establish TCP connections.
-4. **Result Aggregation**: Successes are collected via a results channel and printed to the console in real-time.
+4. **Result Aggregation & JSON Export**: Successes are collected via a results channel into a slice of `ScanResult` structs. The tool then uses `json.MarshalIndent` to generate a structured, audit-ready report printed to the console.
+
+---
+
+## 📋 Data Model
+
+The scanner uses a structured `ScanResult` object to manage and export discovery data:
+
+```go
+type ScanResult struct {
+	PodName   string `json:"PodName"`
+	IP        string `json:"IP"`
+	Port      int    `json:"Port"`
+	Timestamp string `json:"Timestamp"`
+}
+
+```
 
 ---
 
@@ -45,6 +62,7 @@ go build -o k8s-scan main.go
 # (Optional) Move to your path
 mv k8s-scan /usr/local/bin/
 
+
 ```
 
 ---
@@ -58,6 +76,7 @@ The scanner defaults to the `default` namespace but can be targeted at any speci
 ```bash
 ./k8s-scan scan
 
+
 ```
 
 ### Scan a Specific Namespace
@@ -66,6 +85,7 @@ The scanner defaults to the `default` namespace but can be targeted at any speci
 ./k8s-scan scan --namespace my-app-production
 # OR
 ./k8s-scan scan -n kube-system
+
 
 ```
 
