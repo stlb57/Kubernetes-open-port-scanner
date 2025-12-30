@@ -11,10 +11,41 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/clientcmd"
 )
+
+type MockScanner struct {
+	Clientset kubernetes.Interface
+}
+
+func (m *MockScanner) PodDetails() (*v1.PodList, error) {
+	fakeClientSet := fake.NewClientset(
+		&v1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "pod-1",
+				Namespace: "default",
+			},
+			Status: v1.PodStatus{
+				PodIP: "192.168.2.2",
+			},
+			Spec: v1.PodSpec{
+				Containers: []v1.Container{
+					{
+						Name: "app",
+						Ports: []v1.ContainerPort{
+							{ContainerPort: 1000},
+						},
+					},
+				},
+			},
+		},
+	)
+	return fakeClientSet.CoreV1().Pods("default").List(context.Background(), metav1.ListOptions{})
+}
 
 type Target struct {
 	PodName string
@@ -29,12 +60,29 @@ type ScanResult struct {
 	Timestamp string `json:"Timestamp"`
 }
 
+type K8sScanner interface {
+	PodDetails() (*v1.PodList, error)
+}
+
+type ClusterClient struct {
+	Clientset kubernetes.Interface
+}
+
+func (c *ClusterClient) PodDetails() (*v1.PodList, error) {
+	return c.Clientset.CoreV1().Pods(Namespace).List(context.Background(), metav1.ListOptions{})
+}
+
 var scanCmd = &cobra.Command{
 	Use:   "scan",
 	Short: "Scan K8s Pods for open ports",
 	Long:  `Discovers Pod IPs in the cluster and scans them using a concurrent worker pool.`,
 	Run: func(cmd *cobra.Command, args []string) {
-		startScanner()
+		client, err := AuthPodDetails()
+		if err != nil {
+			fmt.Printf("Error connecting to cluster: %v\n", err)
+			os.Exit(1)
+		}
+		startScanner(client)
 	},
 }
 
@@ -42,14 +90,22 @@ func init() {
 	rootCmd.AddCommand(scanCmd)
 }
 
-func startScanner() {
+func AuthPodDetails() (K8sScanner, error) {
 	userHomeDir, _ := os.UserHomeDir()
 	kubeconfigPath := filepath.Join(userHomeDir, ".kube", "config")
-	config, _ := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
-	clientset, _ := kubernetes.NewForConfig(config)
+	config, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
+	if err != nil {
+		return nil, err
+	}
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, err
+	}
 
-	pods, _ := clientset.CoreV1().Pods(Namespace).List(context.Background(), metav1.ListOptions{})
+	return &ClusterClient{Clientset: clientset}, nil
+}
 
+func startScanner(k8s K8sScanner) {
 	jobs := make(chan Target, 100)
 	results := make(chan ScanResult, 100)
 	var wg sync.WaitGroup
@@ -61,6 +117,13 @@ func startScanner() {
 
 	go func() {
 		commonPorts := []int{80, 443, 8080}
+		pods, err := k8s.PodDetails()
+		if err != nil {
+			fmt.Printf("Error fetching pods: %v\n", err)
+			close(jobs)
+			return
+		}
+
 		for _, pod := range pods.Items {
 			if pod.Status.PodIP != "" {
 				for _, p := range commonPorts {
@@ -79,6 +142,10 @@ func startScanner() {
 	var allResults []ScanResult
 	fmt.Printf("🔍 Scanning namespace: %s...\n", Namespace)
 	for res := range results {
+		err := checkValidJSON(res)
+		if err != nil {
+			panic(err)
+		}
 		allResults = append(allResults, res)
 	}
 	jsonData, err := json.MarshalIndent(allResults, "", "  ")
@@ -86,8 +153,21 @@ func startScanner() {
 		fmt.Printf("Error marshaling results: %s\n", err.Error())
 		return
 	}
-	fmt.Println(string(jsonData))
 
+	fmt.Println(string(jsonData))
+}
+
+func checkValidJSON(res ScanResult) error {
+	if res.PodName == "" {
+		return fmt.Errorf("PodName is empty")
+	}
+	if res.IP == "" {
+		return fmt.Errorf("IP is empty")
+	}
+	if res.Port <= 0 {
+		return fmt.Errorf("Port must be > 0")
+	}
+	return nil
 }
 
 func port_checker(wg *sync.WaitGroup, jobs <-chan Target, results chan<- ScanResult) {
