@@ -1,33 +1,56 @@
 # 🚀 Kubernetes Port Scanner (k8s-scan)
 
-A high-performance CLI tool written in **Go** designed to audit and discover open ports across Kubernetes Pods. By leveraging Go's powerful concurrency primitives and the official `client-go` library, `k8s-scan` identifies network vulnerabilities and exposed services within your cluster at scale.
+A high-performance, **Instrumented CLI Sentinel** written in **Go**. Designed to audit and discover open ports across Kubernetes Pods at scale, `k8s-scan` provides real-time visibility into your cluster's network security posture.
 
 ---
 
 ## ✨ Key Features
 
-* **⚡ High-Performance Concurrency**: Utilizes a robust **Worker Pool** pattern with 100 concurrent goroutines to scan hundreds of targets simultaneously without overwhelming system resources.
+* **⚡ High-Performance Concurrency**: Utilizes a robust **Worker Pool** pattern with 100 concurrent goroutines to scan targets with maximum throughput.
+* **📈 Industrial Observability**: Integrated **Prometheus Exporter** exposing real-time system "vitals" via a `/metrics` endpoint.
 * **☸️ Native K8s Integration**: Directly communicates with the Kubernetes API to dynamically discover Pod IPs in real-time.
-* **📊 Structured JSON Reporting**: Generates machine-readable, pretty-printed JSON audit reports for easy integration with security pipelines.
-* **🛠️ Professional CLI Interface**: Built on the **Cobra** framework, providing a familiar, `kubectl`-like experience with flags and subcommands.
-* **🛡️ Resilient Scanning**: Implements `net.DialTimeout` to ensure the scanner doesn't hang on unresponsive network segments.
+* **📊 Structured JSON Reporting**: Generates machine-readable, pretty-printed JSON audit reports for forensic analysis.
+* **🛠️ Professional CLI Interface**: Built on the **Cobra** framework for a familiar, `kubectl`-like experience.
 
 ---
 
 ## 🏗️ How It Works
 
-The tool implements a **Producer-Consumer** architecture:
+The tool implements a **Producer-Consumer** architecture enhanced with an **Observability Layer**:
 
-1. **Discovery (Producer)**: The tool fetches all Pods from a specified namespace using your local `~/.kube/config`.
-2. **Job Distribution**: Pod IPs and target ports (80, 443, 8080) are pushed into a buffered "jobs" channel.
-3. **Worker Pool (Consumer)**: 50 workers pull tasks from the channel and attempt to establish TCP connections.
-4. **Result Aggregation & JSON Export**: Successes are collected via a results channel into a slice of `ScanResult` structs. The tool then uses `json.MarshalIndent` to generate a structured, audit-ready report printed to the console.
+1. **Discovery (Producer)**: Fetches Pods from the target namespace and increments the `k8s_port_scans_total` counter for every pod identified.
+2. **Job Distribution**: Targets are fed into a buffered channel.
+3. **Worker Pool (Consumer)**: 100 workers execute the scan. The `k8s_active_workers` gauge tracks real-time pool load, while the `k8s_open_ports_total` counter records every discovery.
+4. **Metrics Server**: A background HTTP server exposes all internal metrics at `:2112/metrics` for Prometheus scraping.
+5. **Result Aggregation**: Successes are collected and exported as a structured JSON report.
+
+---
+
+## 📊 Observability & Metrics
+
+To achieve the **"Visual Truth,"** this tool exposes a Prometheus-compatible endpoint.
+
+### Exposed Metrics:
+
+| Metric Name | Type | Description |
+| --- | --- | --- |
+| `k8s_port_scans_total` | Counter | Total volume of pods identified for scanning. |
+| `k8s_open_ports_total` | Counter | Total number of security "hits" (open ports) found. |
+| `k8s_active_workers` | Gauge | Number of concurrent workers currently active in the pool. |
+| `k8s_scan_duration_seconds` | Histogram | Latency distribution of the total scan operation. |
+
+**Accessing Metrics:**
+
+```bash
+curl http://localhost:2112/metrics
+
+```
 
 ---
 
 ## 📋 Data Model
 
-The scanner uses a structured `ScanResult` object to manage and export discovery data:
+The scanner uses a structured `ScanResult` object with UTC timestamps:
 
 ```go
 type ScanResult struct {
@@ -43,64 +66,35 @@ type ScanResult struct {
 
 ## 🚦 Prerequisites
 
-Before running the tool, ensure you have:
-
 * **Go**: Version 1.25.5 or higher.
-* **Kubeconfig**: A valid configuration file located at `~/.kube/config`.
-* **Permissions**: RBAC permissions to `list` pods in the target namespace.
-
----
-
-## 📥 Installation
-
-Clone the repository and build the binary:
-
-```bash
-# Build the project
-go build -o k8s-scan main.go
-
-# (Optional) Move to your path
-mv k8s-scan /usr/local/bin/
-
-
-```
+* **Kubeconfig**: Valid config at `~/.kube/config`.
+* **Prometheus**: (Optional) For scraping the metrics endpoint.
 
 ---
 
 ## 🚀 Usage
 
-The scanner defaults to the `default` namespace but can be targeted at any specific namespace using flags.
-
-### Scan Default Namespace
+### Run Scan & Expose Metrics
 
 ```bash
 go run main.go scan
 
-
 ```
 
-### Scan a Specific Namespace
+### Scraping with Prometheus
 
-```bash
-go run main.go scan --namespace my-app-production
-# OR
-go run main.go scan -n kube-system
+Add the following to your `prometheus.yml`:
 
+```yaml
+scrape_configs:
+  - job_name: 'k8s-scanner'
+    static_configs:
+      - targets: ['localhost:2112']
 
 ```
-
----
-
-## 🛠️ Configuration & Dependencies
-
-This project relies on professional-grade Go modules:
-
-* `k8s.io/client-go`: For Kubernetes cluster communication.
-* `github.com/spf13/cobra`: For the CLI structure and flag management.
-* `k8s.io/apimachinery`: For Kubernetes API schema definitions.
 
 ---
 
 ## 📝 License
 
-Copyright © 2025. All rights reserved.
+Copyright © 2026. All rights reserved.
