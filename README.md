@@ -74,7 +74,7 @@ The scanner defaults to the `default` namespace but can be targeted at any speci
 ### Scan Default Namespace
 
 ```bash
-./k8s-scan scan
+go run main.go scan
 
 
 ```
@@ -82,9 +82,9 @@ The scanner defaults to the `default` namespace but can be targeted at any speci
 ### Scan a Specific Namespace
 
 ```bash
-./k8s-scan scan --namespace my-app-production
+go run main.go scan --namespace my-app-production
 # OR
-./k8s-scan scan -n kube-system
+go run main.go scan -n kube-system
 
 
 ```
