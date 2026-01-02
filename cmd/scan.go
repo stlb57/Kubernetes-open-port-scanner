@@ -5,10 +5,15 @@ import (
 	"encoding/json"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/spf13/cobra"
 	v1 "k8s.io/api/core/v1"
@@ -16,6 +21,29 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 	"k8s.io/client-go/tools/clientcmd"
+)
+
+var (
+	scansTotal = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "k8s_port_scans_total",
+		Help: "The total number of pods scanned for open ports",
+	})
+
+	openPortsFound = promauto.NewCounter(prometheus.CounterOpts{
+		Name: "k8s_open_ports_total",
+		Help: "The total number of open ports discovered",
+	})
+
+	scanDuration = promauto.NewHistogram(prometheus.HistogramOpts{
+		Name:    "k8s_scan_duration_seconds",
+		Help:    "Duration of port scans in seconds",
+		Buckets: prometheus.DefBuckets,
+	})
+
+	k8s_active_workers = promauto.NewGauge(prometheus.GaugeOpts{
+		Name: "k8s_active_workers",
+		Help: "Gauge to track the current load on your worker pool.",
+	})
 )
 
 type MockScanner struct {
@@ -106,12 +134,21 @@ func AuthPodDetails() (K8sScanner, error) {
 }
 
 func startScanner(k8s K8sScanner) {
+	go func() {
+		http.Handle("/metrics", promhttp.Handler())
+		fmt.Println("📈 Metrics server active at :2112/metrics")
+		if err := http.ListenAndServe(":2112", nil); err != nil {
+			fmt.Printf("Metrics server failed: %v\n", err)
+		}
+	}()
 	jobs := make(chan Target, 100)
 	results := make(chan ScanResult, 100)
 	var wg sync.WaitGroup
+	start := time.Now()
 
-	for w := 1; w <= 50; w++ {
+	for w := 1; w <= 100; w++ {
 		wg.Add(1)
+		k8s_active_workers.Inc()
 		go port_checker(&wg, jobs, results)
 	}
 
@@ -125,6 +162,7 @@ func startScanner(k8s K8sScanner) {
 		}
 
 		for _, pod := range pods.Items {
+			scansTotal.Inc()
 			if pod.Status.PodIP != "" {
 				for _, p := range commonPorts {
 					jobs <- Target{PodName: pod.Name, IP: pod.Status.PodIP, Port: p}
@@ -132,11 +170,13 @@ func startScanner(k8s K8sScanner) {
 			}
 		}
 		close(jobs)
+
 	}()
 
 	go func() {
 		wg.Wait()
 		close(results)
+		scanDuration.Observe(time.Since(start).Seconds())
 	}()
 
 	var allResults []ScanResult
@@ -155,6 +195,7 @@ func startScanner(k8s K8sScanner) {
 	}
 
 	fmt.Println(string(jsonData))
+	select {} // blocks forever
 }
 
 func checkValidJSON(res ScanResult) error {
@@ -172,10 +213,13 @@ func checkValidJSON(res ScanResult) error {
 
 func port_checker(wg *sync.WaitGroup, jobs <-chan Target, results chan<- ScanResult) {
 	defer wg.Done()
+	defer k8s_active_workers.Dec()
 	for target := range jobs {
+
 		address := fmt.Sprintf("%s:%d", target.IP, target.Port)
 		conn, err := net.DialTimeout("tcp", address, 1*time.Second)
 		if err == nil {
+			openPortsFound.Inc()
 			res := ScanResult{
 				PodName:   target.PodName,
 				IP:        target.IP,
